@@ -21,6 +21,8 @@ GitHub 的 **Code → Download ZIP** 和自动生成的 **Source code** 是源�
 ## 功能
 
 - 支持多个工作表、同格多个单号、跨行重复单号和一个单号多个订单。
+- 精确表头优先识别“月结赔付单号”，其次“快递单号/物流单号/运单号/发货单号”，最后以“单号”兜底；同级候选歧义时停止。
+- 查询键自动忽略首尾多余空白、逗号、顿号、分号和竖线；保留源单元格，未知说明及不完整单号仍需核对。
 - 按 `l_id`、`@=` 查询，同时提交原单号与 `@` 前缀形式；默认不加日期限制。
 - 每批默认 25 个单号；返回达到 500 条时自动拆批，单号仍达到上限则停止，防止漏回填。
 - 每批校验后保存断点；中断后沿用原工作目录续查，已完成项自动跳过；支持小批复查未找到。
@@ -29,6 +31,8 @@ GitHub 的 **Code → Download ZIP** 和自动生成的 **Source code** 是源�
 
 追加列依次为“查询快递单号”“发货时间(confirm_date)”“实付金额(paid_amount)”“备注(remark)”“查询结果”。金额 0 保留，多订单逐行对应，不合计、不覆盖原表“价值”。只直接支持 `.xlsx`。
 
+新增五列宽度依次为 24、32、30、80、32；原列宽、默认列宽和原行高保持不变。多订单及长备注完整存储，原行高不足时可点选单元格查看全文。
+
 ## 源码开发与验证
 
 源码仓库保留通用脚本和测试，便携运行时作为 Release 附件分发。Windows x64 开发环境可使用 Python 3.13、Node.js 24，并安装固定版本依赖：
@@ -36,8 +40,11 @@ GitHub 的 **Code → Download ZIP** 和自动生成的 **Source code** 是源�
 ```powershell
 python -m pip install -r skills/customer-express-issue-query-playwright/scripts/requirements.txt
 python -B -m unittest discover -s tests -p "test_*.py" -v
+python -B -m unittest discover -s skills/customer-express-issue-query-playwright/tests -p "test_*.py" -v
 node --test tests/test_query.js
 ```
+
+两组 Python 测试分别在独立进程运行，避免同名测试模块冲突；技能目录内的回归测试也会随技能安装，便于独立维护时检查表头、单号解析和无损导出。
 
 源码环境直接调用 `python skills/customer-express-issue-query-playwright/scripts/cdp_query.py doctor --endpoint http://127.0.0.1:9222`；准备和导出使用同目录的 `excel.py`。专用浏览器仍可通过 `start-browser.cmd` 启动。具体查询顺序和参数以技能说明为准。
 
@@ -48,11 +55,12 @@ node --test tests/test_query.js
 | `skills/customer-express-issue-query-playwright/SKILL.md` | 查询业务规则与操作流程 |
 | `scripts/cdp_query.py`（技能目录内） | CDP 连接、订单 frame 选择、锁和断点 |
 | `scripts/query.js`（技能目录内） | 登录页面中的异步只读查询与拆批 |
-| `scripts/excel.py`（技能目录内） | 原版无损 Excel 准备与导出 |
+| `scripts/excel.py`（技能目录内） | 表头识别、单号解析及无损 Excel 导出 |
 | `scripts/start_browser.ps1`（技能目录内） | 独立 Edge/Chrome 配置及回环调试端口 |
-| `tests/` | 34 项离线测试和可选本地 CDP 集成测试 |
+| `tests/` | 查询、断点、Excel 离线测试和可选本地 CDP 集成测试 |
+| `tests/`（技能目录内） | 表头兜底、边界分隔符、列宽及无损保留回归测试 |
 
-已验证 34 项离线测试、临时 Edge 的真实 CDP 连接、本地虚构订单接口的完整查询/续查/复查/导出，以及中文路径解压与安装。未查询真实聚水潭订单；实际使用时先在本人已登录的高阶版页面试查一批，确认账号、字段和匹配数。
+验证覆盖离线回归、临时 Edge 的真实 CDP 连接、本地虚构订单接口的完整查询/续查/复查/导出，以及中文路径解压与安装。真实业务数据不进入测试或仓库；实际使用时仍须先在本人已登录的高阶版页面试查一批，确认账号、字段和匹配数。
 
 `tests/smoke_cdp.py` 是可选集成检查，使用专用临时浏览器及本机虚构接口，不访问真实 ERP。需要 Windows 和 Edge；使用时传入新的空目录：
 

@@ -23,6 +23,8 @@ jobs:
           python -m pip install --only-binary=:all: -r skills/customer-express-issue-query-playwright/scripts/requirements.txt
       - name: Excel and checkpoint tests
         run: python -B -m unittest discover -s tests -p "test_*.py" -v
+      - name: Installed skill Excel regression tests
+        run: python -B -m unittest discover -s skills/customer-express-issue-query-playwright/tests -p "test_*.py" -v
       - name: Query adapter tests
         run: node --test tests/test_query.js
       - name: Check PowerShell syntax

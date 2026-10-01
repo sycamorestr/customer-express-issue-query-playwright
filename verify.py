@@ -29,6 +29,13 @@ def main():
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     if not result.wasSuccessful():
         return 1
+    # Keep same-named root/skill test modules in separate Python processes.
+    skill_tests = root / 'skills/customer-express-issue-query-playwright/tests'
+    command = subprocess.run([sys.executable, '-B', '-m', 'unittest', 'discover',
+                              '-s', str(skill_tests), '-p', 'test_*.py', '-v'],
+                             cwd=root, check=False)
+    if command.returncode:
+        return command.returncode
     node = root / 'skills/customer-express-issue-query-playwright/runtime/python/Lib/site-packages/playwright/driver/node.exe'
     command = subprocess.run([str(node), '--test', str(root / 'tests/test_query.js')], check=False)
     if command.returncode:

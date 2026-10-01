@@ -26,6 +26,8 @@ $endpoint = 'http://127.0.0.1:9222'
 powershell -NoProfile -ExecutionPolicy Bypass -File "$skill\scripts\start_browser.ps1" -Port 9222 -StartUrl 'https://www.erp321.com/epaas'
 ```
 
+使用者说明浏览器已通过浏览器工作台登记时，优先复用登记。从工作台连接详情，或 `%LOCALAPPDATA%\BrowserWorkbench\settings.json` 的 `registry` 找到原清单及同目录 `.browser-workbench-shops.json`，按环境名称和登记主页确认目标，沿 `browser_config`（相对清单目录解析）读取 `remote_debugging_port`，组成本机 CDP 端点。`settings.json` 的 `port` 是工作台面板端口，不是 CDP 端口。不要扫描 Profile、读取 Cookie 或为已登记环境另建浏览器；多个目标时先消歧。
+
 启动器使用独立目录 `%LOCALAPPDATA%\CustomerExpressIssueQueryPlaywright\browser-profile`，保留使用者自己的登录态。普通浏览器窗口不能事后直接开启 CDP；首次由使用者在这个独立窗口登录。需要验证码或人工登录时保留工作目录，待完成后续查。浏览器窗口若未显示，可从任务栏切换到新实例。不要读取、导出或索要密码、Cookie、Token。
 
 如果使用其他专用浏览器配置，可传 `-UserDataDir` 和 `-Port`；不与日常默认配置混用。启动器不关闭已有浏览器。同一配置已由其他端口使用时，复用原端点或选择另一专用配置。Windows PowerShell 5.1 与 PowerShell 7 均可使用，进程级 ExecutionPolicy 不修改系统策略。
@@ -42,6 +44,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$skill\scripts\start_browse
 
 `connected:true` 只证明连接；必须同时有 `ok:true`、唯一的目标订单 frame 和 `ready:true`。支持顶层页面及嵌套 iframe，不依赖 iframe ID。默认只接受 HTTPS 的 `erp321.com` 及其子域的订单路径；只有已核实的其他 ERP 主机才用 `--allowed-host <精确主机名>`。
 
+已连接但没有订单 frame 时，先查看已连接页面的实际可见入口；若仍在聚水潭首页，可打开页面上的“订单”标签或菜单，然后重新运行 doctor。不要因未打开订单页而误判为需要重建浏览器或重新登录。
+
 多个页面有订单 frame 时，先从 doctor 的 `pageIndex` 和页面路径确认目标，再为 doctor/query 指定 `--page-index N`（batch.ps1 对应 `-PageIndex N`）。同一页面包含多个订单 frame 时，关闭无关的订单标签或让使用者保留一个目标页面，不能随便选首个。索引可能随标签页变化，断点续查前重新检查账号与页面。
 
 ## 准备 Excel
@@ -54,9 +58,9 @@ $inputFile = 'D:\售后\快递问题件.xlsx'
 & $python -B "$skill\scripts\excel.py" prepare --input $inputFile --workdir $work
 ```
 
-只支持 `.xlsx`。其他格式需要可靠地转为新副本并核验；不能直接改后缀。默认处理全部工作表，优先精确表头“月结赔付单号”，其次“快递单号/物流单号/运单号/发货单号”，在前 50 行定位。检查 `skippedSheets`，确认跳过的是说明或汇总页。歧义时用 `--column '月结赔付单号'` 或 `--sheets '圆通,中通'` 指定，换新工作目录 prepare；不能把订单号当快递号。
+只支持 `.xlsx`。其他格式需要可靠地转为新副本并核验；不能直接改后缀。默认处理全部工作表，在前 50 行定位精确表头：优先“月结赔付单号”，其次“快递单号/物流单号/运单号/发货单号”，这些都不存在时才识别“单号”。同一优先级有多个候选时停止，不能自行取第一列；“订单号”不自动当作快递号。prepare 摘要会显示每表采用的表头、列和处理行数。逐表核对 `skippedSheets`；快递明细页缺少已知表头不能当作说明页略过。歧义时用 `--column '月结赔付单号'` 或 `--sheets '圆通,中通'` 指定，换新工作目录 prepare。
 
-支持同格多个单号和已知快递公司标签；查询键转大写并去掉一个 `@` 前缀，源单元格不变。公式、未知说明文字、不完整单号、疑似失去精度的数字会进入 `prepare-errors.json`，不得猜测或静默跳过。读取实际单元格，不信任错误的 dimension 元数据。
+支持同格多个单号和已知快递公司标签；查询键转大写并去掉一个 `@` 前缀。允许单号文本首尾多余的空白、英文/中文逗号、顿号、分号及竖线，清理仅作用于查询键，源单元格不变。只含分隔符、未知标点或说明文字、公式、不完整单号、疑似失去精度的数字仍进入 `prepare-errors.json`，不得猜测或静默跳过。读取实际单元格，不信任错误的 dimension 元数据。
 
 `manifest.json` 保存源路径、SHA256、所有原行映射和去重单号。查询开始后不改清单、源文件，不把工作目录复用给另一任务。
 
@@ -106,10 +110,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$skill\scripts\batch.ps1" -
 
 默认输出 `<源文件名>_高阶版订单查询结果.xlsx`，不覆盖源文件或已有结果。直接编辑 XLSX ZIP 的工作表 XML，不能改为 openpyxl/ExcelJS 全量重存。新列放在所有原单元格（含格式化空白）及合并区域之后，可能靠右；交付时明确列范围。
 
-导出器逐项验证源 SHA256、原单元格/公式/格式/工作表结构、所有未修改 ZIP 部件（图片、WPS cellimages、关系、附件等）的字节，以及重新读取的新结果单元格；超过 32767 UTF-16 字符或含非法 XML 控制字符则停止，不截断。未完成、源变更、坏结果不能宣称完成。
+新增五列按顺序设置宽度 24、32、30、80、32，便于阅读常见单号和时间，备注列留出较大空间。原列宽、默认列宽和原行高保持不变；若原列定义跨到新增区域，只拆分该定义并设置新增五列，其他列的所有属性保留。多订单换行及超长备注仍完整存储，固定原行高可能无法一次显示全文，可点选单元格查看；不要为展示结果而整体调整原行高、裁剪备注或截断单号。
+
+导出器逐项验证源 SHA256、原单元格/公式/格式/工作表结构、结果列之外的原列属性、所有未修改 ZIP 部件（图片、WPS cellimages、关系、附件等）的字节，以及重新读取的新结果单元格。新增列宽单独校验后，仅在结构比较时恢复原列定义；不能简单跳过列格式检查。遇到重叠列定义、多个列定义块、超过 32767 UTF-16 字符或非法 XML 控制字符时停止并保留断点，不自行重排或截断。未完成、源变更、坏结果不能宣称完成。
 
 最后报告结果文件路径、各表处理行数与新增列范围、唯一单号/匹配/复查后未找到/多订单数及源文件未改。脚本退出仅断开 Playwright，保留使用者浏览器和登录态。不要调用关闭用户浏览器的命令。
 
 ## 维护
 
-`scripts/excel.py` 保留原版无损 Excel 实现；`scripts/query.js` 是已选中订单 frame 内的查询函数；`scripts/cdp_query.py` 负责连接、选择、校验、锁与断点；`scripts/start_browser.ps1` 只负责专用浏览器启动。页面变化时依实时证据最小修正，不硬编码真实单号、账号或 iframe ID。
+`scripts/excel.py` 负责表头识别、单号解析与无损导出；`scripts/query.js` 是已选中订单 frame 内的查询函数；`scripts/cdp_query.py` 负责连接、选择、校验、锁与断点；`scripts/start_browser.ps1` 只负责专用浏览器启动。页面变化时依实时证据最小修正，不硬编码真实单号、账号或 iframe ID。
+
+修改 Excel 流程后可运行离线回归：`& $python -B -m unittest discover -s "$skill\tests" -p 'test_*.py' -v`。使用合成数据验证表头优先级、边界分隔符、无损保留和列宽；真实客户表和查询结果不放进技能包。已有查询结果可在独立验证目录离线复用，避免为导出检查重复访问聚水潭。

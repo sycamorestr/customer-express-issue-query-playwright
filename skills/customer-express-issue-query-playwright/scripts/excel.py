@@ -6,7 +6,8 @@ prepare --input FILE.xlsx --workdir DIR [--column HEADER] [--sheets A,B]
 export --workdir DIR [--output FILE.xlsx]
 
 The default column preference is 月结赔付单号, with exact-header fallback to
-快递单号/物流单号/运单号/发货单号. Explicit --column requires that exact header.
+快递单号/物流单号/运单号/发货单号, then 单号 if none of these exist.
+Explicit --column requires that exact header.
 Headers are located in the first 50 actual rows; ambiguous matches fail closed.
 Default traversal reports and skips sheets with no recognized header; explicitly
 selected sheets must have a matching header. At least one tracking row is required.
@@ -16,7 +17,8 @@ For unmatched numbers use matched=0 and exactly [[no, "", "", ""]].
 Existing checkpoint/output files are never overwritten. Duplicate occurrences
 are retained in their original rows; only the query list is deduplicated.
 Prepared keys in unique and sheets[].rows[].nos are uppercased with one leading
-@ removed; original workbook cells remain unchanged. The runner may submit both
+@ removed. Extra boundary separators are ignored; original cells remain unchanged.
+The runner may submit both
 plain and @-prefixed search forms. Manifest metadata includes source, sha256,
 unique, sheets, and original Excel row numbers. Export defaults to
 WORKDIR/<source stem>_高阶版订单查询结果.xlsx; existing files are refused.
@@ -38,10 +40,11 @@ from xml.dom import minidom as D
 
 import openpyxl
 
-HEADERS = ('月结赔付单号', '快递单号', '物流单号', '运单号', '发货单号')
+HEADERS = ('月结赔付单号', '快递单号', '物流单号', '运单号', '发货单号', '单号')
 NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 RID = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 RESULT_HEADERS = ['查询快递单号', '发货时间(confirm_date)', '实付金额(paid_amount)', '备注(remark)', '查询结果']
+RESULT_WIDTHS = (24, 32, 30, 80, 32)
 
 
 def require(condition, message):
@@ -125,6 +128,9 @@ def tracking_tokens(cell):
     # Strip only known courier labels at token boundaries; leave unknown text for review.
     courier = r'(?:极兔(?:速递|快递)?|圆通(?:速递|快递)?|中通(?:快递|速递)?|申通(?:快递)?|韵达(?:快递)?|顺丰(?:速运|快递)?|京东(?:物流|快递)?|邮政(?:快递|速递)?|德邦(?:快递|物流)?|百世(?:快递)?)'
     text = re.sub(r'(^|[\s,，、;；|])' + courier + r'\s*[:：]?\s*(?=@?[A-Za-z0-9]{8,})', r'\1', text)
+    # Empty boundary tokens carry no tracking information. Do not strip unknown
+    # punctuation/annotations, repair numbers, or change the original cell.
+    text = re.sub(r'^[\s,，、;；|]+|[\s,，、;；|]+$', '', text)
     parts = re.split(r'[\s,，、;；|]+', text)
     require(all(re.fullmatch(r'@?[A-Za-z0-9]{8,}', p) and re.search(r'[0-9]', p) for p in parts), 'Unrecognized tracking value; expected complete ASCII tracking numbers separated by spaces, commas, semicolons, or pipes')
     # Canonical keys also avoid PowerShell's case-insensitive hashtable collisions.
@@ -166,6 +172,10 @@ def prepare(args):
                 preferred = [c for c in candidates if c[2] == HEADERS[0]] if args.column is None else []
                 if preferred:
                     candidates = preferred
+                elif args.column is None:
+                    explicit = [c for c in candidates if c[2] != '单号']
+                    if explicit:
+                        candidates = explicit
                 if not candidates and not args.sheets:
                     skipped.append({'name': name, 'reason': 'No recognized exact tracking header in first 50 rows'})
                     continue
@@ -200,7 +210,7 @@ def prepare(args):
     require(bool(unique), 'No tracking numbers found')
     manifest = {'schemaVersion': 1, 'source': str(source), 'sha256': original_hash, 'sheets': sheets, 'unique': list(unique), 'skippedSheets': skipped}
     save_new(work / 'manifest.json', manifest)
-    return {'manifest': str(work / 'manifest.json'), 'unique': len(unique), 'skippedSheets': skipped, 'sheets': [{'name': s['name'], 'rows': len(s['rows']), 'column': s['column'], 'maxRow': s['maxRow'], 'maxCol': s['maxCol']} for s in sheets]}
+    return {'manifest': str(work / 'manifest.json'), 'unique': len(unique), 'skippedSheets': skipped, 'sheets': [{'name': s['name'], 'rows': len(s['rows']), 'column': s['column'], 'header': s['header'], 'maxRow': s['maxRow'], 'maxCol': s['maxCol']} for s in sheets]}
 
 
 def make_element(doc, root, name, attrs=None):
@@ -208,6 +218,77 @@ def make_element(doc, root, name, attrs=None):
     for key, value in (attrs or {}).items():
         node.setAttribute(key, str(value))
     return node
+
+
+def column_settings(root):
+    """Read effective explicit formatting, rejecting ambiguous column ranges."""
+    blocks = children(root, 'cols')
+    require(len(blocks) <= 1, 'Multiple column definition blocks unsupported')
+    settings = {}
+    for block in blocks:
+        for col in children(block, 'col'):
+            first, last = int(col.getAttribute('min')), int(col.getAttribute('max'))
+            require(1 <= first <= last <= 16384, 'Invalid column definition range')
+            attrs = {key: value for key, value in col.attributes.items() if key not in ('min', 'max')}
+            for number in range(first, last + 1):
+                require(number not in settings, 'Overlapping column definitions unsupported')
+                settings[number] = attrs
+    return settings
+
+
+def set_result_widths(doc, root, start):
+    """Set widths only for appended columns; split spanning defaults if needed."""
+    column_settings(root)
+    blocks = children(root, 'cols')
+    if blocks:
+        cols = blocks[0]
+    else:
+        cols = make_element(doc, root, 'cols')
+        root.insertBefore(cols, children(root, 'sheetData')[0])
+    end = start + len(RESULT_WIDTHS) - 1
+    for col in children(cols, 'col'):
+        first, last = int(col.getAttribute('min')), int(col.getAttribute('max'))
+        if first > end or last < start:
+            continue
+        # A producer may apply a single width/style to A:XFD. Keep its exact
+        # attributes everywhere except the five newly populated columns.
+        for left, right in ((first, start - 1), (end + 1, last)):
+            if left <= right:
+                part = col.cloneNode(deep=True)
+                part.setAttribute('min', str(left))
+                part.setAttribute('max', str(right))
+                cols.insertBefore(part, col)
+        cols.removeChild(col)
+    for offset, width in enumerate(RESULT_WIDTHS):
+        number = start + offset
+        col = make_element(doc, root, 'col', {
+            'min': number, 'max': number, 'width': width, 'customWidth': 1,
+        })
+        following = next((c for c in children(cols, 'col') if int(c.getAttribute('min')) > number), None)
+        cols.insertBefore(col, following)
+
+
+def verify_and_restore_columns(olddoc, newdoc, start):
+    """Verify widths and unchanged original formatting before structural diff."""
+    oldroot, newroot = olddoc.documentElement, newdoc.documentElement
+    old, new = column_settings(oldroot), column_settings(newroot)
+    result_columns = set(range(start, start + len(RESULT_WIDTHS)))
+    require(all(old.get(c) == new.get(c) for c in (old.keys() | new.keys()) - result_columns),
+            'Original column formatting changed')
+    for offset, width in enumerate(RESULT_WIDTHS):
+        require(new.get(start + offset) == {'width': str(width), 'customWidth': '1'},
+                'Result column width verification failed')
+    oldblocks, newblocks = children(oldroot, 'cols'), children(newroot, 'cols')
+    if oldblocks:
+        # Preserve comments, extension content and block attributes, too.
+        oldblock, newblock = oldblocks[0].cloneNode(deep=True), newblocks[0].cloneNode(deep=True)
+        for block in (oldblock, newblock):
+            for col in children(block, 'col'):
+                block.removeChild(col)
+        require(oldblock.toxml() == newblock.toxml(), 'Column definition metadata changed')
+        newroot.replaceChild(newdoc.importNode(oldblocks[0], True), newblocks[0])
+    else:
+        newroot.removeChild(newblocks[0])
 
 
 def validate_results(manifest, results):
@@ -241,7 +322,7 @@ def export(args):
         with zipfile.ZipFile(source) as zin:
             require(len(zin.namelist()) == len(set(zin.namelist())), 'Duplicate ZIP entries unsupported')
             paths = package_paths(zin)
-            changes, expected, reports = {}, {}, []
+            changes, expected, reports, result_starts = {}, {}, [], {}
             for sheet in manifest['sheets']:
                 path = paths[sheet['name']]
                 doc = D.parseString(zin.read(path))
@@ -250,12 +331,14 @@ def export(args):
                 rows = {int(r.getAttribute('r')): r for r in children(data, 'row')}
                 existing = {c.getAttribute('r'): c for r in rows.values() for c in children(r, 'c')}
                 # Append beyond ALL existing cell nodes, including blank styled cells.
-                # This keeps every original cell/style and column definition intact.
+                # Original cells/styles stay intact; widths change only in new columns.
                 lastcol = max([colnum(ref) for ref in existing] + [0])
                 for merge in descendants(root, 'mergeCell'):
                     lastcol = max(lastcol, colnum(merge.getAttribute('ref').split(':')[-1]))
                 start = lastcol + 1
                 require(start + 4 <= 16384, 'No space for result columns')
+                result_starts[sheet['name']] = start
+                set_result_widths(doc, root, start)
                 values = {sheet['headerRow']: RESULT_HEADERS}
                 counts = Counter()
                 seen_rows = set()
@@ -301,7 +384,7 @@ def export(args):
                     root.insertBefore(dim, before)
                 dim.setAttribute('ref', f'A1:{letter(start + 4)}{max(rows)}')
                 changes[path] = doc.toxml(encoding='utf-8')
-                reports.append({'sheet': sheet['name'], 'resultColumns': f'{letter(start)}:{letter(start + 4)}', **counts})
+                reports.append({'sheet': sheet['name'], 'resultColumns': f'{letter(start)}:{letter(start + 4)}', 'resultColumnWidths': list(RESULT_WIDTHS), **counts})
             fd, tempname = tempfile.mkstemp(prefix='excel-export-', suffix='.xlsx', dir=output.parent)
             os.close(fd)
             temp = Path(tempname)
@@ -320,8 +403,11 @@ def export(args):
                     newcells = {c.getAttribute('r'): c for c in descendants(newdoc, 'c')}
                     for old in descendants(olddoc, 'c'):
                         require(old.toxml() == newcells[old.getAttribute('r')].toxml(), 'Original cell changed: ' + old.getAttribute('r'))
-                    # Remove intentional additions and restore dimension; entire original
-                    # worksheet must then be identical, including row/column formatting.
+                    # Check effective formatting outside the added result columns,
+                    # then restore column definitions for the exact structural diff.
+                    verify_and_restore_columns(olddoc, newdoc, result_starts[sheet['name']])
+                    # Remove intentional additions and restore dimension; the rest
+                    # of the original worksheet must then be identical.
                     for coord in expected[sheet['name']]:
                         node = newcells[coord]
                         node.parentNode.removeChild(node)
