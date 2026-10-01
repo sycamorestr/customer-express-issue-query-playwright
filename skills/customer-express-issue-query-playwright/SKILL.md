@@ -1,11 +1,13 @@
 ---
 name: customer-express-issue-query-playwright
-description: 用 Playwright + CDP 连接已登录的 Edge/Chrome，在聚水潭高阶版订单页按 Excel 的月结赔付单号或快递单号批量查询发货时间、实付金额和备注，无损回填新 Excel。适用于客服快递问题件、多工作表、多单号、多订单及断点续查。
+description: 面向客服部门的快递问题件对账。用 Playwright + CDP 连接已登录的 Edge/Chrome，在聚水潭高阶版订单页按 Excel 的月结赔付单号或快递单号批量查询发货时间、实付金额和备注，无损回填新 Excel 供核对。支持多工作表、多单号、多订单及断点续查。
 ---
 
-# 客服快递问题件查询（Playwright + CDP）
+# 客服快递问题件对账 Skill
 
-这是聚水潭**高阶版**的只读订单查询技能。读取 Excel 的快递单号，在真实订单页 `/app/order/order/list.aspx` 的登录上下文调用 `LoadDataToJSON`。不要套用分销版商品成本或物流轨迹流程。
+这是面向客服部门的快递问题件对账技能，通过 Playwright + CDP 在聚水潭**高阶版**只读查询发货时间、实付金额和备注，供核对。读取 Excel 的快递单号，在真实订单页 `/app/order/order/list.aspx` 的登录上下文调用 `LoadDataToJSON`。不要套用分销版商品成本或物流轨迹流程。
+
+仓库统一命名为 `customer-service-express-issue-reconciliation-skill`；为兼容已有便携包，技能调用标识、安装目录和运行时路径仍使用 `customer-express-issue-query-playwright`，不可将仓库名称代入下方路径。
 
 ## 环境与连接
 

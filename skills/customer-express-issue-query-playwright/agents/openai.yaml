@@ -1,4 +1,4 @@
 interface:
-  display_name: "客服快递问题件查询 · Playwright"
-  short_description: "连接已登录聚水潭高阶版，批量查询快递问题件并无损回填 Excel，支持断点续查。"
+  display_name: "客服快递问题件对账 Skill"
+  short_description: "用于客服部门快递问题件对账，连接聚水潭高阶版核对发货时间、实付金额和备注，无损回填 Excel。"
   default_prompt: "使用 $customer-express-issue-query-playwright 查询这份快递问题件 Excel，保留源表并输出新文件。"

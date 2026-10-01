@@ -1,12 +1,14 @@
-# 客服快递问题件查询 · Playwright + CDP
+# 客服快递问题件对账 Skill
 
-读取快递问题件 Excel，在聚水潭**高阶版**订单页按快递单号批量查询发货时间、实付金额和备注，将结果追加到新 Excel，保留源表内容、公式、格式和附件。
+面向客服部门的快递问题件对账。读取快递问题件 Excel，在聚水潭**高阶版**订单页按快递单号批量查询发货时间、实付金额和备注，供逐项核对；将结果追加到新 Excel，保留源表内容、公式、格式和附件。
 
 使用 Playwright 连接 Edge/Chrome 的 CDP 端口，无需 OpenCLI 或浏览器扩展。查询仅调用只读订单接口，不修改聚水潭订单。
 
+仓库统一命名为 `customer-service-express-issue-reconciliation-skill`；为兼容已有便携包，技能调用标识和目录仍使用 `customer-express-issue-query-playwright`，请按下方现有路径使用，不要将仓库名称代入技能或运行时路径。
+
 ## 下载与使用
 
-**普通使用者请下载 [最新 Release 的 Windows64 便携完整包](https://github.com/sycamorestr/customer-express-issue-query-playwright/releases/latest)**。便携包内已带 Python、Playwright、Excel 依赖、安装器和自检，不需要自行安装 Python/npm 或下载 Playwright 浏览器。
+**普通使用者请下载 [最新 Release 的 Windows64 便携完整包](https://github.com/sycamorestr/customer-service-express-issue-reconciliation-skill/releases/latest)**。便携包内已带 Python、Playwright、Excel 依赖、安装器和自检，不需要自行安装 Python/npm 或下载 Playwright 浏览器。
 
 1. 完整解压 Release 附件中的便携 ZIP，运行 `check.cmd`。
 2. 运行 `start-browser.cmd`，在专用 Edge/Chrome 浏览器登录自己的聚水潭高阶版，打开订单列表。

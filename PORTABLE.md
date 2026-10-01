@@ -1,8 +1,10 @@
-# 客服快递问题件查询：Playwright + CDP Windows x64 便携包
+# 客服快递问题件对账 Skill：Playwright + CDP Windows x64 便携包
 
-读取快递问题件 Excel，在聚水潭**高阶版**订单列表批量查询发货时间、实付金额、备注，回填到新 Excel。支持多工作表、多单号、多订单、去重、断点续查、未找到复查，保留源表公式、格式及附件。
+面向客服部门的快递问题件对账。读取快递问题件 Excel，在聚水潭**高阶版**订单列表批量查询发货时间、实付金额、备注，回填到新 Excel 供逐项核对。支持多工作表、多单号、多订单、去重、断点续查、未找到复查，保留源表公式、格式及附件。
 
 此版本使用 Python Playwright 的 `connect_over_cdp()`，不再需要 OpenCLI 或浏览器扩展。原 OpenCLI 版本可继续独立保留。
+
+仓库统一命名为 `customer-service-express-issue-reconciliation-skill`；为兼容已有便携包，技能调用标识和目录仍使用 `customer-express-issue-query-playwright`，以下安装、查询和运行时路径继续使用此兼容标识。
 
 ## 已内置和仍需具备的环境
 
