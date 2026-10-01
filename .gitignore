@@ -1,0 +1,35 @@
+# Portable dependencies are distributed as release assets.
+**/runtime/
+dist/
+build/
+*.zip
+*.whl
+*.exe
+*.dll
+*.pyd
+
+# Local caches and environments.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Business data, sessions and generated tasks must stay local.
+*.xlsx
+*.xls
+*.csv
+*.log
+*.jsonl
+.env
+.env.*
+manifest.json
+results.json
+summary.json
+prepare-errors.json
+query.lock
+browser-profile/
+profiles/
+validation/
+work/
+jobs/
