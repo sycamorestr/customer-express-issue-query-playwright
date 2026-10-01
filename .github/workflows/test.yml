@@ -19,7 +19,8 @@ jobs:
         with:
           node-version: '24'
       - name: Install fixed Python dependencies
-        run: python -m pip install --only-binary=:all: -r skills/customer-express-issue-query-playwright/scripts/requirements.txt
+        run: |
+          python -m pip install --only-binary=:all: -r skills/customer-express-issue-query-playwright/scripts/requirements.txt
       - name: Excel and checkpoint tests
         run: python -B -m unittest discover -s tests -p "test_*.py" -v
       - name: Query adapter tests
